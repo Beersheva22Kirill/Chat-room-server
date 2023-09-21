@@ -59,32 +59,42 @@ function processMessage(clientName,ws,message){
     try {
         const messageObj = JSON.parse(message.toString());
         const clients = messageObj.to;
+        const textMessage = messageObj.text;
         
-        if(!messageObj.text){
-            ws.send(`Message must have field text`) 
-        }
-        let sockets = [];
-        if(!clients || clients == 'all'){
-            sockets = chatRoom.getAllWebSockets();   
-        } else {
-            clients.forEach(client => {
-                const socketsOfClient = chatRoom.getClientWebSockets(client);
-                socketsOfClient.forEach(socket => {
-                sockets.push(socket);
-                })
-            })
-        }
-        const messageForSend = {
-            from:clientName,
-            text:messageObj.text
-        }
+            if(!textMessage || textMessage === ''){
+                ws.send(`Message must have field text and text message`) 
+            }
 
+        const sockets = getClientsForSending(clients);
+        const messageForSend = getMessageForSend(clientName,textMessage)
         sendMessage(sockets,ws,messageForSend)
     
     } catch (error) {
-        ws.send(`Message must have JSON`) 
+        ws.send(`Wrong format of message`) 
     }
-  
+}
+
+function getClientsForSending(clients) {
+    let sockets = [];
+    if (!clients || clients == 'all') {
+        sockets = chatRoom.getAllWebSockets();
+    } else {
+        clients.forEach(client => {
+            const socketsOfClient = chatRoom.getClientWebSockets(client);
+            socketsOfClient.forEach(socket => {
+                sockets.push(socket);
+            });
+        });
+    }
+    return sockets;
+}
+
+function getMessageForSend(clientName,textMessage){
+   const message = {
+        from:clientName,
+        text:textMessage
+    }
+    return message;
 }
 
 function sendMessage(sockets,ws,messageForSend){
