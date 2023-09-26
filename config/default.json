@@ -1,5 +1,14 @@
 {
     "server":{
         "port":3500
+    },
+    "mongodb":{
+        "env_uri_chat":"ATLAS_URI_CHAT",
+        "dbName":"chatroom"
+      },
+      "jwt":{
+        "env_secret":"JWT_SECRET",
+        "expiresIn":"1h"
     }
+
 }

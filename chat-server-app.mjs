@@ -4,21 +4,40 @@ import expressWs from "express-ws";
 import ChatRoom from "./src/service/ChatRoom.mjs";
 import config from 'config';
 import { Socket } from "node:dgram";
+import { accounts } from "./src/router/Accounts.mjs";
+import bodyParser from 'body-parser';
+import errorHandler from "./src/middleware/errorHandler.mjs";
+import cors from 'cors'
+import asyncHandler from 'express-async-handler'
+import AuthService from "./src/service/AuthService.mjs";
+import authVerification from "./src/middleware/authVerification.mjs";
 
 const SERVER_PORT = 'server.port';
 const port = process.env.PORT || config.get(SERVER_PORT)
 
 const app = express();
 const expressWsInstant = expressWs(app);
+app.use(bodyParser.json());
+app.use(cors())
 
 const chatRoom = new ChatRoom();
+const authService = new AuthService();
+
+app.use('/chatroom/accounts',accounts);
 
 app.get('/contacts',(req,res) => {
     res.send(chatRoom.getClients())
 });
 
+app.get('/allusers',asyncHandler(
+    async (req,res) => {
+        const users = await authService.getAllUsers();
+        res.send(users)
+    }
+));
+
 app.ws('/contacts/websocket', (ws,req) => {
-    const clientName = ws.protocol || req.query.clientname;
+    const clientName = authService.verificationToken(ws.protocol)  //|| req.query.clientname;
     if(!clientName){
         closeConnection(ws);
     } else {
@@ -33,7 +52,7 @@ app.ws('/contacts/websocket/:clientName', (ws,req) => {
 })
 
 const server = app.listen(port);
-
+app.use(errorHandler);
 server.on('listening',() => {
     console.log(`Server listening on port: ${server.address().port}`);
 })
@@ -46,10 +65,13 @@ function closeConnection(ws) {
 function processConnection(clientName, ws) {
     const connectionId = crypto.randomUUID();
     chatRoom.addConnection(clientName, connectionId, ws);
+    authService.setActive(clientName,true)
     ws.send(`Hello ${clientName}`);
 
     ws.on('close', () => {
         chatRoom.removeConnection(connectionId);
+        authService.setActive(clientName,false)
+        
     });
 
     ws.on('message', processMessage.bind(undefined,clientName,ws))

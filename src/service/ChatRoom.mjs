@@ -1,19 +1,27 @@
-
+import config from 'config'
+import { MONGO_DB_NAME, MONGO_ENV_URI_CHAT } from '../constant/constants.mjs';
+import MongoConnection from '../mongo/MongoConnection.mjs';
 
 export default class ChatRoom {
 
-    #clients; //{<clientName>:[<array of connections ids>]}
+    #clients; //{<clientName>:{connections:[<array of connections ids>],chats:[<array of chats ids>]}}
     #connections; // {<connectionId>: {client: <clientName>, socket: <websocket>}}
+    #collectionChats;
 
     constructor(){
         this.#clients = {};
         this.#connections = {};
+        const connection_string = process.env[config.get(MONGO_ENV_URI_CHAT)];
+        const dbName = config.get(MONGO_DB_NAME);
+        const connectionDB = new MongoConnection(connection_string,dbName);
+        this.#collectionChats = connectionDB.getCollection('chats')
+
     }
 
     addConnection(clientName, connectionId, ws){
         this.#connections[connectionId] = {client: clientName, socket:ws};
         if(this.#clients[clientName]){
-            this.#clients[clientName].push(connectionId);
+            this.#clients[clientName].connections.push(connectionId);
         } else {
             this.#clients[clientName] = [connectionId];
         }  
