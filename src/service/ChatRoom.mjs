@@ -31,7 +31,7 @@ export default class ChatRoom {
     }
 
     async createChat(user_from,user_to){
-        const query = {$and: [ { $or: [ { "user_from.username": user_from }, { "user_to.username": user_from } ] }, { "$or": [ { "user_from.username": user_to }, { "user_to.username": user_to } ] } ] }
+        const query = {$and: [ { $or: [ { "user_from.username": user_from }, { "user_to.username": user_from } ] }, { $or: [ { "user_from.username": user_to }, { "user_to.username": user_to } ] } ] }
         const oldChat = await this.#collectionChats.findOne(query);
         let chatId;
         if(!oldChat){
@@ -92,6 +92,16 @@ export default class ChatRoom {
         }
         await this.#collectionUsers.updateOne({_id:user},{$set:{chats:chatArray}})
        return chatArray; 
+    }
+
+    async saveMessage(message){
+            const chat = await this.#collectionChats.findOne({_id:message.chatId});
+            if (chat) {
+                chat.messages.push(message);
+                await this.#collectionChats.updateOne({_id:message.chatId},{$set:chat.messages})
+            } 
+             
+       return chat ? chat.messages.length : null 
     }
 
     removeConnection(connectionId){

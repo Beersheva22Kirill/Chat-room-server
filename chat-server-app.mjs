@@ -14,6 +14,7 @@ import authVerification from "./src/middleware/authVerification.mjs";
 import { chats } from "./src/router/Chats.mjs";
 import auth from "./src/middleware/auth.mjs";
 import { ACCESS_DENIED, AUTHENTIFICATION_ERROR, CHANGES_CLIENTS, CLIENT_NOT_FOUND, SERVER, TEXT_FIELD_NOT_FOUND, WRONG_MESSAGE } from "./src/constant/constants.mjs";
+import { authentificationService, chatRoomService, senderSocketService } from "./src/shared/services.mjs";
 
 const SERVER_PORT = 'server.port';
 const port = process.env.PORT || config.get(SERVER_PORT)
@@ -24,18 +25,15 @@ app.use(bodyParser.json());
 app.use(cors())
 app.use(auth);
 
-const chatRoom = new ChatRoom();
-const authService = new AuthService();
-
 app.use('/chatroom/accounts',accounts);
 app.use('/chats',chats)
 app.get('/contacts',(req,res) => {
-    res.send(chatRoom.getClients())
+    res.send(chatRoomService.getClients())
 });
 
 app.get('/allusers',authVerification('ADMIN','USER'),asyncHandler(
     async (req,res) => {
-        const users = await authService.getAllUsers();
+        const users = await authentificationService.getAllUsers();
         res.send(users)
     }
 ));
@@ -43,15 +41,16 @@ app.get('/allusers',authVerification('ADMIN','USER'),asyncHandler(
 
 
 app.ws('/chatroom/websocket', (ws,req) => {
-    const clientName = authService.verificationToken(ws.protocol);
+    const clientName = authentificationService.verificationToken(ws.protocol);
     if(!clientName){
-        ws.send(getMessageObj(SERVER,AUTHENTIFICATION_ERROR))
+        ws.send(getMessageObj(SERVER,getMessageObj(SERVER,AUTHENTIFICATION_ERROR)))
         closeConnection(ws);
     } else {
         processConnection(clientName, ws);
     }
 })
 
+//for
 app.ws('/contacts/websocket/:clientName', (ws,req) => {
     const clientName = req.params.clientName;
     processConnection(clientName, ws);
@@ -70,60 +69,24 @@ function closeConnection(ws) {
 
 async function processConnection(clientName, ws) {
     const connectionId = crypto.randomUUID();
-    chatRoom.addConnection(clientName, connectionId, ws);
-    await authService.setActive(clientName,true)
+    chatRoomService.addConnection(clientName, connectionId, ws);
+    await authentificationService.setActive(clientName,true)
 
-    processMessage(SERVER,ws,getMessageObj(SERVER,CHANGES_CLIENTS))
+    senderSocketService.processMessage(SERVER,getMessageObj(SERVER,CHANGES_CLIENTS))
+    
 
     ws.on('close', () => {
-        chatRoom.removeConnection(connectionId);
-        authService.setActive(clientName,false)
-        processMessage(SERVER,ws,getMessageObj(SERVER,CHANGES_CLIENTS))
-    });
-
-    ws.on('message', processMessage.bind(undefined,clientName,ws))
-}
-
-function processMessage(clientName,ws,message){
-    try {
-        const messageObj = JSON.parse(message.toString());
-        const clients = messageObj.to;
-        const textMessage = messageObj.textMessage;
+        chatRoomService.removeConnection(connectionId);
+        authentificationService.setActive(clientName,false)
+        senderSocketService.processMessage(SERVER,getMessageObj(SERVER,CHANGES_CLIENTS))
         
-            if(!textMessage || textMessage === ''){
-                ws.send(TEXT_FIELD_NOT_FOUND) 
-            }
-
-        const sockets = getClientsForSending(clients);
-        const messageForSend = getMessageForSend(clientName,textMessage)
-        sendMessage(sockets,ws,messageForSend)
+    });
     
-    } catch (error) {
-        ws.send(WRONG_MESSAGE) 
-    }
-}
-
-function getClientsForSending(clients) {
-    let sockets = [];
-    if (!clients || clients == 'all') {
-        sockets = chatRoom.getAllWebSockets();
-    } else {
-        clients.forEach(client => {
-            const socketsOfClient = chatRoom.getClientWebSockets(client);
-            socketsOfClient.forEach(socket => {
-                sockets.push(socket);
-            });
-        });
-    }
-    return sockets;
-}
-
-function getMessageForSend(clientName,textMessage){
-   const message = {
-        from:clientName,
-        textMessage:textMessage
-    }
-    return message;
+    ws.on('message', (message) => {
+        senderSocketService.processMessage(clientName,message)
+        chatRoomService.saveMessage(message)
+    })
+    
 }
 
 function getMessageObj(client_from,message){
@@ -133,15 +96,6 @@ function getMessageObj(client_from,message){
     })
 }
 
-function sendMessage(sockets,ws,messageForSend){
-    if(sockets.length === 0) {
-        ws.send(CLIENT_NOT_FOUND)
-    }else {
-        sockets.forEach(socket => {
-            socket.send(JSON.stringify(messageForSend));
-        })
-    } 
-}
 
 
 
