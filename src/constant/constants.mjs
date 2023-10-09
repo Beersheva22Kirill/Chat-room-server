@@ -16,11 +16,18 @@ export const EMPLOYEE_MIN_ID = "employee.minId";
 export const EMPLOYEE_MAX_ID = "employee.maxId";
 
 //========NOTIFICATIONS==================//
-export const CHANGES_CLIENTS = 'client'
-export const CHANGES_CHATS = 'chats'
+export const CHANGES_CLIENTS = 'SERVER_CLIENT'
+export const CHANGES_CHATS = 'SERVER_CHATS'
 export const ACCESS_DENIED = 'Access denied'
-export const AUTHENTIFICATION_ERROR = 'Authentification error'
+export const AUTHENTIFICATION_ERROR = 'AUTHENTIFICATION ERROR'
 export const WRONG_MESSAGE = 'Wrong format of message';
 export const CLIENT_NOT_FOUND = 'Clients not found';
 export const TEXT_FIELD_NOT_FOUND = 'Message must have field text and text message';
 export const SERVER = 'Server'
+export const TYPE_FIELD_NOT_FOUND = 'Message must have field';
+export const ERROR_TYPE = "Error"
+
+//==================CHAT========================/
+export const CHAT = 'CHAT'
+export const GROUP = 'GROUPE'
+export const CHAT_NOT_FOUND = 'Chat not found'

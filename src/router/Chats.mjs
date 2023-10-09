@@ -15,20 +15,26 @@ chats.use(validation(chatSchema))
 chats.post('/create-chat',valid, asyncHandler(
         async (req,res) =>{
             const newChat = req.body;
-            const chatResponse = await chatRoomService.createChat(newChat.user_from,newChat.user_to)
-            //res.send(getMessageObj(SERVER,CHANGES_CHATS));
-            senderSocketService.processMessage(newChat.user_from,getMessageObj(SERVER,CHANGES_CHATS))
+            const chatResponse = await chatRoomService.createChat(newChat)
+            senderSocketService.processMessage(newChat.users[1],getMessageObj(SERVER,CHANGES_CHATS,newChat.users))
     })
 )
 chats.use(validation(removeChatSchema))
 chats.post('/remove-chat',valid, asyncHandler(
     async (req,res) =>{
         const chatObject = req.body;
-        const chatResponse = await chatRoomService.removeChat(chatObject.user,chatObject.chatId);
-        //res.send(getMessageObj(SERVER,CHANGES_CHATS));
-        senderSocketService.processMessage(chatObject.user,getMessageObj(SERVER,CHANGES_CHATS))
+        const chatResponse = await chatRoomService.removeChat(chatObject.user[0],chatObject.chatId);
+        senderSocketService.processMessage(chatObject.user,getMessageObj(SERVER,CHANGES_CHATS,chatObject.user))
 })
 )
+
+chats.get("/chat/:id",asyncHandler(
+    async(req,res) => {
+        const chatId = req.params.id
+        const chat = await chatRoomService.getChat(chatId);
+        res.send(chat);
+    }
+))
 
 chats.get('',authVerification("ADMIN"),asyncHandler(
     async (req,res) => {
@@ -44,9 +50,16 @@ chats.get('/mychats',authVerification('ADMIN','USER'),asyncHandler(
     }
 ))
 
-function getMessageObj(client_from,message){
-    return JSON.stringify({
-        from:client_from,
-        textMessage:message
-    })
+function getMessageObj(clientFrom,type,clentsTo){
+    const message = {
+        from:clientFrom,
+        type:type,
+        textMessage:''
+    }
+
+    if(clentsTo){
+        message.to = clentsTo
+    }
+
+    return JSON.stringify(message)
 }

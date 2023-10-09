@@ -1,4 +1,4 @@
-import { CLIENT_NOT_FOUND, SERVER, TEXT_FIELD_NOT_FOUND, WRONG_MESSAGE } from "../constant/constants.mjs";
+import { CLIENT_NOT_FOUND, ERROR_TYPE, SERVER, TEXT_FIELD_NOT_FOUND, TYPE_FIELD_NOT_FOUND, WRONG_MESSAGE } from "../constant/constants.mjs";
 
 
 export default class SenderSocket {
@@ -9,27 +9,37 @@ export default class SenderSocket {
         this.#chatRoom = chatRoom;
     }
 
-    processMessage(clientName,message){
-        const ws = this.#chatRoom.getClientWebSockets(clientName);
+    processMessage(clientNameFrom,message){
+        const senderWs = this.#chatRoom.getClientWebSockets(clientNameFrom);
         try {
             const messageObj = JSON.parse(message.toString());
+            const chatId = messageObj.chatId;
+            const dateMessage = messageObj.date;
             const clients = messageObj.to;
+            const type = messageObj.type;
             const textMessage = messageObj.textMessage;
             
                 if(!textMessage || textMessage === ''){
-                    ws.forEach(socket => {
-                        const errorMessage = JSON.stringify(this.#getMessageForSend(SERVER,TEXT_FIELD_NOT_FOUND)) 
+                    senderWs.forEach(socket => {
+                        const errorMessage = JSON.stringify(this.#getMessageForSend(undefined,SERVER,ERROR_TYPE,TEXT_FIELD_NOT_FOUND)) 
                         socket.send(errorMessage)
                     })    
                 }
+
+                if(!type){
+                    senderWs.forEach(socket => {
+                        const errorMessage = JSON.stringify(this.#getMessageForSend(undefined,SERVER,ERROR_TYPE,TYPE_FIELD_NOT_FOUND)) 
+                        socket.send(errorMessage)
+                    }) 
+                }
     
             const sockets = this.#getClientsForSending(clients);
-            const messageForSend = this.#getMessageForSend(clientName,textMessage)
-            this.#sendMessage(sockets,ws,messageForSend)
+            const messageForSend = this.#getMessageForSend(chatId,clientNameFrom,type,textMessage,dateMessage)
+            this.#sendMessage(sockets,senderWs,messageForSend)
         
         } catch (error) {
-            ws.forEach(socket => {
-                const errorMessage = JSON.stringify(this.#getMessageForSend(SERVER,WRONG_MESSAGE)) 
+            senderWs.forEach(socket => {
+                const errorMessage = JSON.stringify(this.#getMessageForSend(undefined,SERVER,ERROR_TYPE,WRONG_MESSAGE)) 
                 socket.send(errorMessage)
             }) 
         }
@@ -49,25 +59,30 @@ export default class SenderSocket {
         }
         return sockets;
     }
-    #getMessageForSend(clientName,textMessage){
+    #getMessageForSend(chatId,clientName,type,textMessage,dateMessage){
         const message = {
+             chatId:chatId,
+             type:type,
+             delivered:false,
+             read:false,
              from:clientName,
              textMessage:textMessage
          }
+         message.date = dateMessage ? dateMessage : new Date().toString()
          return message;
      }
 
      #sendMessage(sockets,ws,messageForSend){
-        if(sockets.length === 0) {
-            ws.forEach(socket => {
-                const error = JSON.stringify(this.#getMessageForSend(SERVER,CLIENT_NOT_FOUND))
-                socket.send(error)
-            })
-        }else {
+       
+        // ws.forEach(socket => {
+        //     socket.send(JSON.stringify(messageForSend));
+        // })
+
+        if(sockets.length != 0) {
             sockets.forEach(socket => {
                 socket.send(JSON.stringify(messageForSend));
             })
-        } 
+        }
     }
 
 }

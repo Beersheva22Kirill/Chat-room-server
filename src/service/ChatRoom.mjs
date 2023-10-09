@@ -1,6 +1,6 @@
 import config from 'config'
 import crypto from 'node:crypto'
-import { MONGO_DB_NAME, MONGO_ENV_URI_CHAT } from '../constant/constants.mjs';
+import { CHAT, CHAT_NOT_FOUND, MONGO_DB_NAME, MONGO_ENV_URI_CHAT } from '../constant/constants.mjs';
 import MongoConnection from '../mongo/MongoConnection.mjs';
 
 export default class ChatRoom {
@@ -30,38 +30,44 @@ export default class ChatRoom {
         return connectionId;
     }
 
-    async createChat(user_from,user_to){
-        const query = {$and: [ { $or: [ { "user_from.username": user_from }, { "user_to.username": user_from } ] }, { $or: [ { "user_from.username": user_to }, { "user_to.username": user_to } ] } ] }
+    async createChat(newChat){
+        const query = { $and : [ { type : CHAT }, { users : { $all : [ { username : newChat.users[0], active : false }, { username : newChat.users[1], active : true } ] } } ] }
         const oldChat = await this.#collectionChats.findOne(query);
+        this.#collectionChats.aggregate()
         let chatId;
         if(!oldChat){
             chatId = crypto.randomUUID();
-            const chat = toChatDB(user_from,user_to,chatId);
+            const chat = createChatObjectDB(newChat,chatId);
                 await this.#collectionChats.insertOne(chat);
-                await this.addChatForUser(user_from,user_to);
-                await this.addChatForUser(user_to,user_from);
         } else {
                 chatId = oldChat._id;
-                await this.setActiveUser(oldChat, user_from, true);
+                await this.setActiveUser(oldChat._id, newChat.users[0], true);
         }
         
         return chatId;
     }
 
+    async createGroupe(newGroupe){
+       
+            const groupeId = crypto.randomUUID();
+            const groupe = createChatObjectDB(newGroupe,groupeId);
+                await this.#collectionChats.insertOne(groupe);
+        
+        return groupeId;
+    }
+
     async removeChat(user,chatId){
         const chat = await this.#collectionChats.findOne({_id:chatId});
         if(chat){
-            this.setActiveUser(chat,user,false)
+            this.setActiveUser(chat._id,user,false)
         }
         return chat._id
     }
 
-    async setActiveUser(chat, user, active) {
-        if (chat.user_from.username === user) {
-            await this.#collectionChats.updateOne({ _id: chat._id }, { $set: { "user_from.active": active } });
-        } else {
-            await this.#collectionChats.updateOne({ _id: chat._id }, { $set: { "user_to.active": active } });
-        }
+    async setActiveUser(chatId, user, active) {
+                
+        await this.#collectionChats.updateOne({ _id: chatId,"users.username":user}, { $set: { "users.$.active": active } });
+    
     }
 
     async getAllChats(){
@@ -70,12 +76,23 @@ export default class ChatRoom {
     }
 
     async getChats(username){
-        const query = {$or: [ { $and: [ { "user_from.username": username },{ "user_from.active": true }] }, { $and: [ { "user_to.username": username }, { "user_to.active": true } ] } ]}
+        //const query = { $and : [ { type : CHAT }, { users : { username : username, active : true } } ] }
+        const query = { users : { username : username, active : true } }
         const chats = await this.#collectionChats.find(query).toArray()
         const arrChatItem = chats.map(chat => {
+            let name;
+            if (chat.type == 'GROUPE') {
+                name = chat.groupeName
+            }  else {
+                name = chat.users[0].username != username ? chat.users[0].username : chat.users[1].username 
+            }
             const chatItem = {
                 idChat:chat._id,
-                chatName:chat.user_from.username === username ? chat.user_to.username : chat.user_from.username
+                chatName: name,
+                users:chat.users,
+                type:chat.type
+                
+                
             }
             return chatItem;
         })
@@ -94,15 +111,35 @@ export default class ChatRoom {
        return chatArray; 
     }
 
+    async isActive(chatId,user){
+        const chat = await this.getChat(chatId);
+        const index = chat.users.findIndex((u) => u.username === user);
+        let result = true;
+        if (index > -1 && !chat.users[index].active){
+            result = false
+        }
+        return result;
+    }
+
     async saveMessage(message){
             const chat = await this.#collectionChats.findOne({_id:message.chatId});
             if (chat) {
                 chat.messages.push(message);
-                await this.#collectionChats.updateOne({_id:message.chatId},{$set:chat.messages})
+                await this.#collectionChats.updateOne({_id:message.chatId},{$set:{messages:chat.messages}})
             } 
              
        return chat ? chat.messages.length : null 
     }
+
+    async getChat(chatId){
+        const chat = await this.#collectionChats.findOne({_id:chatId})
+        if (!chat) {
+            chat = CHAT_NOT_FOUND
+        }
+        return toChat(chat)
+
+    }
+
 
     removeConnection(connectionId){
             const client = this.#connections[connectionId].client;
@@ -142,11 +179,46 @@ export default class ChatRoom {
 
 }
 
-function toChatDB(user_from,user_to,chatId){
-    return {
-        _id:chatId,
-        user_from:{username:user_from,active:true},
-        user_to:{username:user_to,active:true},
-        messages:[]
+function createChatObjectDB(chat,chatId){
+const chatObject = {
+    _id:chatId,
+    type:chat.type,
+    users:getUsers(chat.users),
+    messages:[]
+}
+    if (chat.type == "GROUPE") {
+        setGroupeField(chatObject, chat);
     }
+
+    return chatObject
+}
+
+function toChat(chat){
+
+    const chatObject = {
+    idChat:chat._id,
+    type:chat.type,
+    users:chat.users,
+    messages:chat.messages
+    }
+
+    if (chat.type == "GROUPE") {
+        setGroupeField(chatObject, chat);
+    }
+
+    return chatObject
+}
+
+function setGroupeField(chatObject, chat) {
+    chatObject.author = chat.author;
+    chatObject.groupeName = chat.groupName;
+}
+
+function getUsers(users){
+    return users.map(user => {
+        return {
+            username:user,
+            active:true
+        }
+    })
 }
